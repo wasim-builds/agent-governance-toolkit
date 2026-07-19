@@ -61,7 +61,7 @@ AGT does not try to win that fight inside the prompt. Every tool call, message s
 **Prerequisites:** Python 3.10+
 
 ```bash
-pip install agent-governance-toolkit[full]
+pip install "agent-governance-toolkit[full]"
 ```
 
 Use the `[full]` extra for the quick-start imports below. The base
@@ -123,6 +123,9 @@ Or use the full `PolicyEvaluator` API for programmatic control:
 <summary><b>PolicyEvaluator example</b></summary>
 
 ```python
+import warnings
+warnings.filterwarnings("ignore", category=DeprecationWarning, module="agent_os")
+
 from agent_os.policies import (
     PolicyEvaluator, PolicyDocument, PolicyRule,
     PolicyCondition, PolicyAction, PolicyOperator, PolicyDefaults
