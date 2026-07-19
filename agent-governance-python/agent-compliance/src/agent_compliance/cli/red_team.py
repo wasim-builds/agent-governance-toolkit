@@ -314,13 +314,13 @@ def attack(target: str, playbook_id: Optional[str], output_json: bool, threshold
             "target": target,
             "experiment_id": experiment.experiment_id,
             "playbooks_run": len(results),
-            "overall_passed": all(r.passed for r in results),
+            "overall_passed": all((r.resilience_score >= threshold) for r in results),
             "results": [
                 {
                     "playbook_id": r.playbook.playbook_id,
                     "name": r.playbook.name,
                     "resilience_score": r.resilience_score,
-                    "passed": r.passed,
+                    "passed": (r.resilience_score >= threshold),
                     "steps": [
                         {
                             "name": step.name,
@@ -344,22 +344,23 @@ def attack(target: str, playbook_id: Optional[str], output_json: bool, threshold
 
         overall_pass = True
         for r in results:
-            icon = "+" if r.passed else "!"
+            is_passed = (r.resilience_score >= threshold)
+            icon = "+" if is_passed else "!"
             click.echo(f"  [{icon}] {r.playbook.name}")
             click.echo(f"      Score: {r.resilience_score}/100  ", nl=False)
-            click.echo(f"{'PASS' if r.passed else 'FAIL'}")
+            click.echo(f"{'PASS' if is_passed else 'FAIL'}")
 
             for step, result, passed in r.step_results:
                 step_icon = "+" if passed else "x"
                 click.echo(f"        [{step_icon}] {step.name}: {result.value}")
 
             click.echo()
-            if not r.passed:
+            if not is_passed:
                 overall_pass = False
 
         click.echo(f"  {'─'*56}")
         total = len(results)
-        passed_count = sum(1 for r in results if r.passed)
+        passed_count = sum(1 for r in results if (r.resilience_score >= threshold))
         click.echo(f"  Results: {passed_count}/{total} playbooks passed")
         click.echo(f"  Overall: {'PASS' if overall_pass else 'FAIL'}\n")
 

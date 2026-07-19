@@ -156,7 +156,7 @@ class TestRedTeamListPlaybooks:
             assert "playbook" in result.output.lower()
         else:
             # If agent-sre not installed, expect helpful error
-            assert "agent-sre" in result.output
+            assert "agent-sre" in (result.output + getattr(result, "stderr", ""))
 
     def test_list_playbooks_json(self, runner: CliRunner):
         result = runner.invoke(cli, ["red-team", "list-playbooks", "--json"])
@@ -286,3 +286,52 @@ class TestHelperFunctions:
         prompt_results = {"test.txt": {"grade": "A", "score": 95, "missing": []}}
         recs = _generate_recommendations(prompt_results, None)
         assert any("passed" in r.lower() for r in recs)
+
+
+def test_attack_divergent_passed_score(runner, monkeypatch):
+    from agent_compliance.cli.agt import cli
+
+    # Mock _get_adversarial to return fake classes and results
+    class FakePlaybook:
+        def __init__(self, name):
+            self.playbook_id = name
+            self.name = name
+
+    class FakeResult:
+        def __init__(self, playbook, score, passed):
+            self.playbook = playbook
+            self.resilience_score = score
+            self.passed = passed
+            self.step_results = []
+
+    class FakeExperiment:
+        experiment_id = "test-123"
+        def __init__(self, **kwargs): pass
+        def start(self): pass
+        def complete(self): pass
+
+    class FakeRunner:
+        def __init__(self, experiment): pass
+        def run_all(self, selected):
+            # Divergent: score 75 >= 70, but passed=False
+            return [FakeResult(FakePlaybook("test-pb"), 75, False)]
+
+    def mock_get_adversarial():
+        return {
+            "BUILTIN_PLAYBOOKS": [FakePlaybook("test-pb")],
+            "AdversarialRunner": FakeRunner,
+            "ChaosExperiment": FakeExperiment,
+            "Fault": mock.Mock(),
+            "FaultType": mock.Mock(),
+        }
+
+    import agent_compliance.cli.red_team as rt
+    monkeypatch.setattr(rt, "_get_adversarial", mock_get_adversarial)
+
+    result = runner.invoke(cli, ["red-team", "attack", "--threshold", "70", "--json"])
+    # With the fix, threshold (75 >= 70) dictates success (True), NOT r.passed (False)
+    assert result.exit_code == 0
+    data = json.loads(result.output)
+    assert data["overall_passed"] is True
+    assert data["results"][0]["passed"] is True
+
